@@ -1,12 +1,6 @@
 package com.github.myway.render;
 
-import java.awt.Color;
-import java.awt.Graphics;
-import java.awt.image.BufferedImage;
-import java.io.File;
 import java.io.IOException;
-
-import javax.imageio.ImageIO;
 
 import com.github.myway.core.Earth;
 import com.github.myway.osm.MapData;
@@ -20,47 +14,46 @@ import com.github.myway.voice.gpx.Track;
 public class MapToImage implements AutoCloseable {
 	private static final int MAX_SIDE_LEN = 1800;
 
-	private static Color getWayColor(Way way) {
+	private static MywayColor getWayColor(Way way) {
 		if (isTrack(way))
-			return Color.BLACK;
-		return Color.GREEN;
+			return MywayColor.BLACK;
+		return MywayColor.GREEN;
 	}
 
 	private static boolean isTrack(Way way) {
 		return way.getTags().get("highway") != null;
 	}
 
+	private Drawable drawable;
 	private MapData map;
-	private BufferedImage img;
-	private Graphics g;
-	private int h;
-	private int w;
+	private int h = 100;
+	private int w = 100;
 
-	private double dw;
+	private double dw = 1d;
 
-	private double dh;
+	private double dh = 1d;
 
-	public MapToImage(MapData map) {
+	public MapToImage(DrawableFactory factory, MapData map) {
 		this.map = map;
-		double dlat = Earth.distance(map.getBounds().getLatitudeMin(), map.getBounds().getLongitudeMin(),
-				map.getBounds().getLatitudeMax(), map.getBounds().getLongitudeMin());
-		double dlon = Earth.distance(map.getBounds().getLatitudeMin(), map.getBounds().getLongitudeMin(),
-				map.getBounds().getLatitudeMin(), map.getBounds().getLongitudeMax());
+		if (map != null) {
+			double dlat = Earth.distance(map.getBounds().getLatitudeMin(), map.getBounds().getLongitudeMin(),
+					map.getBounds().getLatitudeMax(), map.getBounds().getLongitudeMin());
+			double dlon = Earth.distance(map.getBounds().getLatitudeMin(), map.getBounds().getLongitudeMin(),
+					map.getBounds().getLatitudeMin(), map.getBounds().getLongitudeMax());
 
-		double dmax = Math.max(dlat, dlon);
-		h = (int) (MAX_SIDE_LEN * dlat / dmax);
-		w = (int) (MAX_SIDE_LEN * dlon / dmax);
+			double dmax = Math.max(dlat, dlon);
+			h = (int) (MAX_SIDE_LEN * dlat / dmax);
+			w = (int) (MAX_SIDE_LEN * dlon / dmax);
 
-		dw = (map.getBounds().getLongitudeMax() - map.getBounds().getLongitudeMin()) / w;
-		dh = (map.getBounds().getLatitudeMax() - map.getBounds().getLatitudeMin()) / h;
-
-		img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
-		g = img.getGraphics();
+			dw = (map.getBounds().getLongitudeMax() - map.getBounds().getLongitudeMin()) / w;
+			dh = (map.getBounds().getLatitudeMax() - map.getBounds().getLatitudeMin()) / h;
+		}
+		drawable = factory.create(w, h);
 	}
 
 	@Override
 	public void close() {
-		g.dispose();
+		drawable.close();
 	}
 
 	private void drawLine(double longitudeA, double latitudeA, double longitudeB, double latitudeB) {
@@ -68,7 +61,7 @@ public class MapToImage implements AutoCloseable {
 		int y1 = toY(latitudeA);
 		int x2 = toX(longitudeB);
 		int y2 = toY(latitudeB);
-		g.drawLine(x1, y1, x2, y2);
+		drawable.drawLine(x1, y1, x2, y2);
 		System.out.println("x1 " + x1 + ", y1 " + y1 + ", x2 " + x2 + ", y2 " + y2);
 	}
 
@@ -81,8 +74,11 @@ public class MapToImage implements AutoCloseable {
 	}
 
 	public void drawMap() throws IOException {
-		g.setColor(Color.WHITE);
-		g.fillRect(0, 0, w, h);
+		drawable.setColor(MywayColor.WHITE);
+		drawable.fillRect(0, 0, w, h);
+		if (map == null) {
+			return;
+		}
 		for (Way way : map.getWays()) {
 			if (!isTrack(way))
 				drawWay(way);
@@ -91,7 +87,7 @@ public class MapToImage implements AutoCloseable {
 			if (isTrack(way))
 				drawWay(way);
 		}
-		g.setColor(Color.CYAN);
+		drawable.setColor(MywayColor.CYAN);
 		drawLine(map.getBounds().getLongitudeMin(), map.getBounds().getLatitudeMin(), map.getBounds().getLongitudeMax(),
 				map.getBounds().getLatitudeMax());
 	}
@@ -100,7 +96,7 @@ public class MapToImage implements AutoCloseable {
 		for (int i = 0; i < segment.getPoints().size() - 1; i++) {
 			Point a = segment.getPoints().get(i);
 			Point b = segment.getPoints().get(i + 1);
-			g.setColor(Color.RED);
+			drawable.setColor(MywayColor.RED);
 			drawLine(a.getLongitude(), a.getLatitude(), b.getLongitude(), b.getLatitude());
 		}
 	}
@@ -110,23 +106,26 @@ public class MapToImage implements AutoCloseable {
 		double latitudeA = nodeA.getLatitude();
 		int x1 = toX(longitudeA);
 		int y1 = toY(latitudeA);
-		g.drawString(name, x1, y1);
+		drawable.drawString(name, x1, y1);
 	}
 
 	public void drawTrack(Track track) {
+		if (track == null) {
+			return;
+		}
 		for (Segment segment : track.getSegments()) {
 			drawSegment(segment);
 		}
 	}
 
 	private void drawWay(Way way) {
-		Color c = getWayColor(way);
+		MywayColor c = getWayColor(way);
 		String name = way.getTags().get("name");
 		if (name != null) {
-			g.setColor(Color.BLUE);
+			drawable.setColor(MywayColor.BLUE);
 			drawString(name, way.center());
 		}
-		g.setColor(c);
+		drawable.setColor(c);
 		for (int i = 0; i < way.getNodes().size() - 1; i++) {
 			NodeRef a = way.getNodes().get(i);
 			NodeRef b = way.getNodes().get(i + 1);
@@ -138,15 +137,15 @@ public class MapToImage implements AutoCloseable {
 		}
 	}
 
-	public void saveImage() throws IOException {
-		ImageIO.write(img, "jpg", new File("/tmp/map.jpg"));
-	}
-
 	private int toX(double longitude) {
-		return (int) ((longitude - map.getBounds().getLongitudeMin()) / dw);
+		return map == null ? 0 : (int) ((longitude - map.getBounds().getLongitudeMin()) / dw);
 	}
 
 	private int toY(double latitude) {
-		return h - (int) ((latitude - map.getBounds().getLatitudeMin()) / dh);
+		return map == null ? 0 : h - (int) ((latitude - map.getBounds().getLatitudeMin()) / dh);
+	}
+
+	public Drawable getDrawable() {
+		return drawable;
 	}
 }
