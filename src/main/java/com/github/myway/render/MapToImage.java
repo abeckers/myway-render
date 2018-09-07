@@ -42,8 +42,8 @@ public class MapToImage implements AutoCloseable {
 					map.getBounds().getLatitudeMin(), map.getBounds().getLongitudeMax());
 
 			double dmax = Math.max(dlat, dlon);
-			h = (int) (MAX_SIDE_LEN * dlat / dmax);
-			w = (int) (MAX_SIDE_LEN * dlon / dmax);
+			h = (int) Math.ceil(MAX_SIDE_LEN * dlat / dmax);
+			w = (int) Math.ceil(MAX_SIDE_LEN * dlon / dmax);
 
 			dw = (map.getBounds().getLongitudeMax() - map.getBounds().getLongitudeMin()) / w;
 			dh = (map.getBounds().getLatitudeMax() - map.getBounds().getLatitudeMin()) / h;
